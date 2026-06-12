@@ -1,0 +1,26 @@
+services:
+  backend:
+    build: ./backend
+    env_file:
+      - .env
+    environment:
+      CLIENT_URL: http://localhost:8080
+      OTP_DEMO_MODE: ${OTP_DEMO_MODE:-true}
+    volumes:
+      - visitor-storage:/app/storage
+    expose:
+      - "5000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+        VITE_SERVER_URL: ""
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  visitor-storage:

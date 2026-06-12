@@ -1,0 +1,90 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f4f7fb;
+  color: #1f2937;
+}
+header {
+  background: #111827;
+  color: white;
+  padding: 16px 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+nav a,
+nav button {
+  margin-left: 14px;
+  color: white;
+  background: none;
+  border: 0;
+  text-decoration: none;
+  cursor: pointer;
+}
+main {
+  padding: 28px;
+}
+.card {
+  background: white;
+  padding: 18px;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px #0001;
+  margin: 14px 0;
+}
+.narrow {
+  max-width: 420px;
+  margin: 40px auto;
+}
+.form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+input,
+select,
+button {
+  padding: 11px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
+button {
+  background: #2563eb;
+  color: white;
+  border: 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+}
+th,
+td {
+  padding: 12px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 16px;
+}
+.stat {
+  background: white;
+  border-radius: 14px;
+  padding: 24px;
+  text-transform: capitalize;
+}
+.stat b {
+  font-size: 34px;
+  display: block;
+}
+.qr {
+  width: 120px;
+  display: block;
+  margin: 10px 0;
+}
+.error {
+  color: #dc2626;
+}

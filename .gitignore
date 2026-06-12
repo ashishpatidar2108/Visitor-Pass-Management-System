@@ -1,0 +1,8 @@
+.env
+node_modules/
+dist/
+backend/storage/uploads/*
+backend/storage/badges/*
+!backend/storage/uploads/.gitkeep
+!backend/storage/badges/.gitkeep
+npm-debug.log*
