@@ -20,7 +20,6 @@ const userSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false },
     verificationOtpHash: String,
     verificationOtpExpiresAt: Date,
-    verificationOtpAttempts: { type: Number, default: 0 },
     verificationOtpLastSentAt: Date
   },
   { timestamps: true }

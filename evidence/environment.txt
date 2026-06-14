@@ -1,0 +1,5 @@
+Verified: 2026-06-13
+Node: v24.14.1
+npm: 11.11.0
+Docker: not installed on this verification machine
+Browser: login and reports page loaded successfully at http://127.0.0.1:5173

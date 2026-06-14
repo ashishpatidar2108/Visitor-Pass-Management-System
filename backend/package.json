@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "test": "node --test",
+    "test:smoke": "node src/scripts/smokeTest.js",
     "seed": "node src/scripts/seed.js",
     "migrate:organizations": "node src/scripts/migrateOrganizations.js"
   },

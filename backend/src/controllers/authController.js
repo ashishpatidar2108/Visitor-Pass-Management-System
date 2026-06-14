@@ -1,64 +1,59 @@
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 
 const User = require('../models/User');
 const { sendEmail, sendSms } = require('../services/notificationService');
+const {
+  generateOtp,
+  getOtpExpiry,
+  hashOtp,
+  isOtpExpired,
+  OTP_EXPIRY_MINUTES
+} = require('../utils/otp');
 const { normalizeOrganization } = require('../utils/organization');
 
-const OTP_EXPIRY_MINUTES = 10;
 const OTP_RESEND_SECONDS = Number(process.env.OTP_RESEND_SECONDS) || 60;
-const MAX_OTP_ATTEMPTS = 5;
 
-function createOtp() {
-  return crypto.randomInt(100000, 1000000).toString();
+function isDemoMode() {
+  return process.env.OTP_DEMO_MODE === 'true';
 }
 
-function hashOtp(otp) {
-  return crypto
-    .createHash('sha256')
-    .update(`${otp}:${process.env.JWT_SECRET}`)
-    .digest('hex');
+function canResendOtp(user) {
+  if (!user.verificationOtpLastSentAt) {
+    return true;
+  }
+
+  const elapsed = Date.now() - user.verificationOtpLastSentAt.getTime();
+  return elapsed >= OTP_RESEND_SECONDS * 1000;
 }
 
-function canShowDemoOtp() {
-  return (
-    process.env.OTP_DEMO_MODE === 'true' ||
-    process.env.NODE_ENV !== 'production'
+async function deliverOtp(user, otp) {
+  const message = `Your Visitor Pass verification OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
+  const emailSent = await sendEmail(
+    user.email,
+    'Visitor Pass Verification OTP',
+    message
   );
+
+  if (emailSent) {
+    return true;
+  }
+
+  return sendSms(user.phone, message);
 }
 
-function canSendOtpNow(user) {
-  return (
-    !user.verificationOtpLastSentAt ||
-    Date.now() - user.verificationOtpLastSentAt.getTime() >=
-      OTP_RESEND_SECONDS * 1000
-  );
-}
-
-async function issueVerificationOtp(user) {
-  const otp = createOtp();
+async function issueOtp(user) {
+  const otp = generateOtp();
   user.verificationOtpHash = hashOtp(otp);
-  user.verificationOtpExpiresAt = new Date(
-    Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000
-  );
-  user.verificationOtpAttempts = 0;
+  user.verificationOtpExpiresAt = getOtpExpiry();
   user.verificationOtpLastSentAt = new Date();
   await user.save();
 
-  const message = `Your Visitor Pass verification OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
-  const deliveryResults = await Promise.allSettled([
-    sendEmail(user.email, 'Visitor Pass Verification OTP', message),
-    sendSms(user.phone, message)
-  ]);
-  const delivered = deliveryResults.some(
-    (result) => result.status === 'fulfilled' && result.value === true
-  );
+  if (isDemoMode()) {
+    return { sent: false, demoOtp: otp };
+  }
 
-  return {
-    delivered,
-    demoOtp: !delivered && canShowDemoOtp() ? otp : undefined
-  };
+  return { sent: await deliverOtp(user, otp) };
 }
 
 function createSession(user) {
@@ -85,16 +80,6 @@ async function register(req, res) {
   const existingUser = await User.findOne({ email: normalizedEmail });
 
   if (existingUser) {
-    if (!existingUser.isVerified && canShowDemoOtp()) {
-      const delivery = await issueVerificationOtp(existingUser);
-      return res.json({
-        message: 'New local demo OTP generated for this unverified account',
-        email: existingUser.email,
-        verificationRequired: true,
-        demoOtp: delivery.demoOtp
-      });
-    }
-
     return res.status(400).json({ message: 'Email already exists' });
   }
 
@@ -108,9 +93,9 @@ async function register(req, res) {
     organization: normalizeOrganization(organization),
     isVerified: false
   });
-  const delivery = await issueVerificationOtp(user);
+  const delivery = await issueOtp(user);
 
-  if (!delivery.delivered && !delivery.demoOtp) {
+  if (!delivery.sent && !delivery.demoOtp) {
     return res.status(503).json({
       message: 'OTP delivery is not configured. Contact the administrator.',
       email: user.email,
@@ -119,9 +104,9 @@ async function register(req, res) {
   }
 
   return res.status(201).json({
-    message: delivery.delivered
-      ? 'OTP sent to your registered email or phone'
-      : 'OTP generated for local demo verification',
+    message: delivery.demoOtp
+      ? 'OTP generated for local demo verification'
+      : 'OTP sent to your registered email or phone',
     email: user.email,
     verificationRequired: true,
     demoOtp: delivery.demoOtp
@@ -142,20 +127,10 @@ async function login(req, res) {
   }
 
   if (user.isVerified === false) {
-    let demoOtp;
-
-    if (canShowDemoOtp()) {
-      const delivery = await issueVerificationOtp(user);
-      demoOtp = delivery.demoOtp;
-    }
-
     return res.status(403).json({
-      message: demoOtp
-        ? 'Enter the local demo OTP shown on the verification page'
-        : 'Please verify your OTP before login',
+      message: 'Please verify your OTP before login',
       email: user.email,
-      verificationRequired: true,
-      demoOtp
+      verificationRequired: true
     });
   }
 
@@ -177,28 +152,18 @@ async function verifyOtp(req, res) {
     return res.json({ message: 'Account is already verified' });
   }
 
-  if (
-    !user.verificationOtpHash ||
-    !user.verificationOtpExpiresAt ||
-    user.verificationOtpExpiresAt < new Date()
-  ) {
+  if (isOtpExpired(user.verificationOtpExpiresAt)) {
     return res.status(400).json({ message: 'OTP expired. Request a new OTP.' });
   }
 
-  if (user.verificationOtpAttempts >= MAX_OTP_ATTEMPTS) {
-    return res.status(429).json({ message: 'Too many attempts. Resend OTP.' });
-  }
-
-  if (hashOtp(otp) !== user.verificationOtpHash) {
-    user.verificationOtpAttempts += 1;
-    await user.save();
+  if (!user.verificationOtpHash || hashOtp(otp) !== user.verificationOtpHash) {
     return res.status(400).json({ message: 'Invalid OTP' });
   }
 
   user.isVerified = true;
   user.verificationOtpHash = undefined;
   user.verificationOtpExpiresAt = undefined;
-  user.verificationOtpAttempts = 0;
+  user.verificationOtpLastSentAt = undefined;
   await user.save();
 
   return res.json({ message: 'Account verified. You can now login.' });
@@ -218,22 +183,22 @@ async function resendOtp(req, res) {
     return res.status(400).json({ message: 'Account is already verified' });
   }
 
-  if (!canSendOtpNow(user)) {
+  if (!canResendOtp(user)) {
     return res.status(429).json({
       message: `Please wait ${OTP_RESEND_SECONDS} seconds before resending`
     });
   }
 
-  const delivery = await issueVerificationOtp(user);
+  const delivery = await issueOtp(user);
 
-  if (!delivery.delivered && !delivery.demoOtp) {
+  if (!delivery.sent && !delivery.demoOtp) {
     return res.status(503).json({
       message: 'OTP delivery is not configured. Contact the administrator.'
     });
   }
 
   return res.json({
-    message: delivery.delivered ? 'New OTP sent' : 'New demo OTP generated',
+    message: delivery.demoOtp ? 'New demo OTP generated' : 'New OTP sent',
     demoOtp: delivery.demoOtp
   });
 }

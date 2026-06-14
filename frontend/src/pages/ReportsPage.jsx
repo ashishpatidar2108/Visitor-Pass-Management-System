@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import api from '../services/api';
+import { createCheckLogsCsv, downloadCsv } from '../utils/csvExport.mjs';
 
 const initialFilters = {
   search: '',
@@ -8,10 +9,6 @@ const initialFilters = {
   from: '',
   to: ''
 };
-
-function escapeCsv(value) {
-  return `"${String(value ?? '').replaceAll('"', '""')}"`;
-}
 
 function getRequestParams(filters) {
   return {
@@ -62,33 +59,8 @@ function ReportsPage() {
   }, [filters]);
 
   function exportCsv() {
-    const rows = [
-      [
-        'Visitor',
-        'Email',
-        'Pass Token',
-        'Action',
-        'Location',
-        'Scanned By',
-        'Date'
-      ],
-      ...logs.map((log) => [
-        log.visitor?.name,
-        log.visitor?.email,
-        log.pass?.qrToken,
-        log.action,
-        log.location,
-        log.scannedBy?.name,
-        new Date(log.createdAt).toLocaleString()
-      ])
-    ];
-    const csv = rows.map((row) => row.map(escapeCsv).join(',')).join('\n');
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'visitor-check-logs.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    const csv = createCheckLogsCsv(logs);
+    downloadCsv(csv, 'visitor-check-logs.csv');
   }
 
   return (

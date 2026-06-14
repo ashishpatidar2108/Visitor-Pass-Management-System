@@ -113,13 +113,47 @@ npm start
 - Frontend: `http://localhost:5173`
 - Backend: `http://localhost:5000`
 
+## Tests and Execution Proof
+
+Run the focused unit tests:
+
+```bash
+cd backend
+npm test
+
+cd ../frontend
+npm test
+npm run build
+```
+
+Run the database-backed API smoke test:
+
+```bash
+cd backend
+npm run test:smoke
+```
+
+The smoke test uses the configured MongoDB database and demo login. It verifies:
+
+- API startup and MongoDB connection
+- Invalid JWT rejection
+- Login and JWT creation
+- Protected dashboard access
+- QR pass verification and check-in log creation
+- Report filtering
+- Visitor registration, demo OTP verification, and visitor login
+
+Temporary smoke-test users and logs are deleted when the test finishes.
+Captured command output is stored in the `evidence` folder.
+
 ## OTP Flow
 
 1. Visitor registers with email, password, and organization.
-2. A 6-digit OTP is sent through configured email/SMS.
-3. For local demo mode, the OTP is displayed on the verification screen.
-4. Login remains blocked until verification succeeds.
-5. OTP expires after 10 minutes and has an attempt limit.
+2. A 6-digit OTP is generated and only its HMAC hash is stored.
+3. The OTP is sent through configured email/SMS.
+4. For local demo mode, the OTP is displayed on the verification screen.
+5. Login remains blocked until verification succeeds.
+6. OTP expires after 10 minutes. Resend requests have a cooldown.
 
 ## Multi-Organization Support
 
@@ -154,6 +188,9 @@ docker compose up --build
 Open `http://localhost:8080`.
 
 The Nginx frontend proxies `/api`, `/uploads`, and `/badges` to the backend.
+Run this command on a machine with Docker installed and include its terminal
+output in the demo video. Docker was not available on the machine used to
+create the included execution evidence.
 
 ## Project Flow
 
@@ -177,5 +214,10 @@ The `screenshots` folder contains:
 7. MongoDB collections
 8. OTP verification page
 
-Record the demo video as `demo-video/visitor-pass-demo.mp4`, then upload the
-video to Google Drive or YouTube if the submission platform limits file size.
+The `evidence` folder contains unit-test, build, environment, and API smoke-test
+output captured on June 13, 2026.
+
+Before resubmitting, record a narrated demo video using the checklist in
+`docs/RESUBMISSION.md`. Upload the video to Google Drive or YouTube if the
+submission platform limits file size. A Google Drive file link is evidence,
+not a deployed project URL; submit a live application URL separately.
