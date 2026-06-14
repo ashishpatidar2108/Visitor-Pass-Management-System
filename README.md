@@ -215,9 +215,4 @@ The `screenshots` folder contains:
 8. OTP verification page
 
 The `evidence` folder contains unit-test, build, environment, and API smoke-test
-output captured on June 13, 2026.
-
-Before resubmitting, record a narrated demo video using the checklist in
-`docs/RESUBMISSION.md`. Upload the video to Google Drive or YouTube if the
-submission platform limits file size. A Google Drive file link is evidence,
-not a deployed project URL; submit a live application URL separately.
+output captured on June 13, 2026
