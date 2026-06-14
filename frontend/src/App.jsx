@@ -6,6 +6,7 @@ import RoleRoute from './components/routing/RoleRoute';
 import AppointmentsPage from './pages/AppointmentsPage';
 import DashboardPage from './pages/DashboardPage';
 import DatabasePage from './pages/DatabasePage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import LoginPage from './pages/LoginPage';
 import PassesPage from './pages/PassesPage';
 import RegisterPage from './pages/RegisterPage';
@@ -23,6 +24,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/verify-otp" element={<VerifyOtpPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>

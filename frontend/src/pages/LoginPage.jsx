@@ -14,10 +14,17 @@ function LoginPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  function updateField(field, value) {
+    setForm({ ...form, [field]: value });
+    if (message) setMessage('');
+  }
 
   async function submit(event) {
     event.preventDefault();
     setMessage('');
+    setLoading(true);
 
     try {
       const { data } = await api.post('/auth/login', form);
@@ -40,42 +47,95 @@ function LoginPage() {
       }
 
       setMessage(error.response?.data?.message || 'Login failed');
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <main className="auth-page">
-      <div className="card narrow">
-        <h2>Login</h2>
+    <main className="auth-page login-page">
+      <span className="login-shape login-shape-one" aria-hidden="true" />
+      <span className="login-shape login-shape-two" aria-hidden="true" />
+
+      <div className="card narrow login-card">
+        <div className="login-heading">
+          <span className="login-mark" aria-hidden="true">
+            VP
+          </span>
+          <div>
+            <h2>Welcome back</h2>
+            <p className="muted">Sign in to manage visitor access.</p>
+          </div>
+        </div>
+
         <form onSubmit={submit}>
-          <input
-            type="email"
-            placeholder="Email"
-            value={form.email}
-            onChange={(event) =>
-              setForm({ ...form, email: event.target.value })
-            }
-            required
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={form.password}
-            onChange={(event) =>
-              setForm({ ...form, password: event.target.value })
-            }
-            required
-          />
-          <button type="submit">Login</button>
+          <label className="login-field">
+            <span>Email</span>
+            <input
+              type="email"
+              placeholder="Enter your email"
+              value={form.email}
+              onChange={(event) => updateField('email', event.target.value)}
+              disabled={loading}
+              required
+            />
+          </label>
+          <label className="login-field">
+            <span>Password</span>
+            <input
+              type="password"
+              placeholder="Enter your password"
+              value={form.password}
+              onChange={(event) => updateField('password', event.target.value)}
+              disabled={loading}
+              required
+            />
+          </label>
+          <button className="login-submit" type="submit" disabled={loading}>
+            {loading && <span className="login-spinner" aria-hidden="true" />}
+            <span>{loading ? 'Signing in...' : 'Login'}</span>
+          </button>
         </form>
-        {message && <p className="error">{message}</p>}
-        {location.state?.message && (
-          <p className="success">{location.state.message}</p>
+
+        {loading && (
+          <p className="login-status" role="status" aria-live="polite">
+            Checking your account securely...
+          </p>
         )}
-        <small>Demo: admin@test.com / 123456</small>
-        <p className="auth-link">
-          New visitor? <Link to="/register">Create account</Link>
-        </p>
+        {message && (
+          <div className="login-alert login-alert-error" role="alert">
+            <span className="login-alert-icon" aria-hidden="true">
+              !
+            </span>
+            <div>
+              <strong>Login unsuccessful</strong>
+              <p>{message}</p>
+            </div>
+          </div>
+        )}
+        {location.state?.message && (
+          <div
+            className="login-alert login-alert-success"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="login-alert-icon" aria-hidden="true">
+              ✓
+            </span>
+            <p>{location.state.message}</p>
+          </div>
+        )}
+
+        <div className="login-links">
+          <Link to="/forgot-password">Forgot email or password?</Link>
+          <p>
+            New visitor? <Link to="/register">Create account</Link>
+          </p>
+        </div>
+
+        <small className="demo-login">
+          Demo login: admin@test.com / 123456
+        </small>
       </div>
     </main>
   );

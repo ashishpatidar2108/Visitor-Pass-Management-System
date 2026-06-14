@@ -9,6 +9,7 @@ const User = require('../models/User');
 
 const smokeEmail = `smoke-${Date.now()}@example.com`;
 const smokePassword = 'SmokeTest123!';
+const resetPassword = 'ResetTest456!';
 let createdLogId;
 
 async function request(baseUrl, path, options = {}) {
@@ -118,12 +119,30 @@ async function run() {
     }
     console.log('PASS demo OTP generated');
 
+    const unverifiedLoginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: smokeEmail,
+        password: smokePassword
+      })
+    });
+    const unverifiedLogin = await unverifiedLoginResponse.json();
+    if (
+      unverifiedLoginResponse.status !== 403 ||
+      !unverifiedLogin.verificationRequired ||
+      !unverifiedLogin.demoOtp
+    ) {
+      throw new Error('Unverified login did not return a demo OTP');
+    }
+    console.log('PASS unverified login redirected to OTP verification');
+
     await request(baseUrl, '/api/auth/verify-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email: smokeEmail,
-        otp: registration.body.demoOtp
+        otp: unverifiedLogin.demoOtp
       })
     });
     console.log('PASS OTP verification');
@@ -137,6 +156,54 @@ async function run() {
       })
     });
     console.log('PASS verified visitor login');
+
+    const forgotPassword = await request(
+      baseUrl,
+      '/api/auth/forgot-password',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: smokeEmail })
+      }
+    );
+    if (!forgotPassword.body.demoOtp) {
+      throw new Error('Password reset did not return a demo OTP');
+    }
+    console.log('PASS password reset OTP generated');
+
+    await request(baseUrl, '/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: smokeEmail,
+        otp: forgotPassword.body.demoOtp,
+        password: resetPassword
+      })
+    });
+    console.log('PASS password reset');
+
+    const oldPasswordResponse = await fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: smokeEmail,
+        password: smokePassword
+      })
+    });
+    if (oldPasswordResponse.status !== 401) {
+      throw new Error('Old password still works after password reset');
+    }
+    console.log('PASS old password rejected');
+
+    await request(baseUrl, '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: smokeEmail,
+        password: resetPassword
+      })
+    });
+    console.log('PASS login with reset password');
   } finally {
     if (createdLogId) {
       await CheckLog.deleteOne({ _id: createdLogId });

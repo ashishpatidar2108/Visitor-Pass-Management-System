@@ -27,11 +27,17 @@ function canResendOtp(user) {
   return elapsed >= OTP_RESEND_SECONDS * 1000;
 }
 
-async function deliverOtp(user, otp) {
-  const message = `Your Visitor Pass verification OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
+async function deliverOtp(user, otp, purpose) {
+  const isPasswordReset = purpose === 'password-reset';
+  const subject = isPasswordReset
+    ? 'Visitor Pass Password Reset OTP'
+    : 'Visitor Pass Verification OTP';
+  const message = `Your Visitor Pass ${
+    isPasswordReset ? 'password reset' : 'verification'
+  } OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
   const emailSent = await sendEmail(
     user.email,
-    'Visitor Pass Verification OTP',
+    subject,
     message
   );
 
@@ -42,18 +48,19 @@ async function deliverOtp(user, otp) {
   return sendSms(user.phone, message);
 }
 
-async function issueOtp(user) {
+async function issueOtp(user, purpose = 'verification') {
   const otp = generateOtp();
   user.verificationOtpHash = hashOtp(otp);
   user.verificationOtpExpiresAt = getOtpExpiry();
   user.verificationOtpLastSentAt = new Date();
+  user.verificationOtpPurpose = purpose;
   await user.save();
 
   if (isDemoMode()) {
     return { sent: false, demoOtp: otp };
   }
 
-  return { sent: await deliverOtp(user, otp) };
+  return { sent: await deliverOtp(user, otp, purpose) };
 }
 
 function createSession(user) {
@@ -127,10 +134,17 @@ async function login(req, res) {
   }
 
   if (user.isVerified === false) {
+    const delivery = await issueOtp(user);
+
     return res.status(403).json({
-      message: 'Please verify your OTP before login',
+      message: delivery.demoOtp
+        ? 'A new demo OTP was generated. Verify your account to continue.'
+        : delivery.sent
+          ? 'A new OTP was sent. Verify your account to continue.'
+          : 'OTP delivery is not configured. Contact the administrator.',
       email: user.email,
-      verificationRequired: true
+      verificationRequired: true,
+      demoOtp: delivery.demoOtp
     });
   }
 
@@ -156,7 +170,11 @@ async function verifyOtp(req, res) {
     return res.status(400).json({ message: 'OTP expired. Request a new OTP.' });
   }
 
-  if (!user.verificationOtpHash || hashOtp(otp) !== user.verificationOtpHash) {
+  if (
+    user.verificationOtpPurpose !== 'verification' ||
+    !user.verificationOtpHash ||
+    hashOtp(otp) !== user.verificationOtpHash
+  ) {
     return res.status(400).json({ message: 'Invalid OTP' });
   }
 
@@ -164,6 +182,7 @@ async function verifyOtp(req, res) {
   user.verificationOtpHash = undefined;
   user.verificationOtpExpiresAt = undefined;
   user.verificationOtpLastSentAt = undefined;
+  user.verificationOtpPurpose = undefined;
   await user.save();
 
   return res.json({ message: 'Account verified. You can now login.' });
@@ -203,4 +222,84 @@ async function resendOtp(req, res) {
   });
 }
 
-module.exports = { login, register, resendOtp, verifyOtp };
+async function forgotPassword(req, res) {
+  const email = String(req.body.email || '')
+    .trim()
+    .toLowerCase();
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    return res.status(404).json({ message: 'No account found with this email' });
+  }
+
+  if (!canResendOtp(user)) {
+    return res.status(429).json({
+      message: `Please wait ${OTP_RESEND_SECONDS} seconds before requesting another OTP`
+    });
+  }
+
+  const delivery = await issueOtp(user, 'password-reset');
+
+  if (!delivery.sent && !delivery.demoOtp) {
+    return res.status(503).json({
+      message: 'OTP delivery is not configured. Contact the administrator.'
+    });
+  }
+
+  return res.json({
+    message: delivery.demoOtp
+      ? 'Password reset demo OTP generated'
+      : 'Password reset OTP sent',
+    email: user.email,
+    demoOtp: delivery.demoOtp
+  });
+}
+
+async function resetPassword(req, res) {
+  const email = String(req.body.email || '')
+    .trim()
+    .toLowerCase();
+  const otp = String(req.body.otp || '').trim();
+  const password = String(req.body.password || '');
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  if (password.length < 6) {
+    return res
+      .status(400)
+      .json({ message: 'Password must be at least 6 characters' });
+  }
+
+  if (isOtpExpired(user.verificationOtpExpiresAt)) {
+    return res.status(400).json({ message: 'OTP expired. Request a new OTP.' });
+  }
+
+  if (
+    user.verificationOtpPurpose !== 'password-reset' ||
+    !user.verificationOtpHash ||
+    hashOtp(otp) !== user.verificationOtpHash
+  ) {
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+
+  user.password = await bcrypt.hash(password, 10);
+  user.verificationOtpHash = undefined;
+  user.verificationOtpExpiresAt = undefined;
+  user.verificationOtpLastSentAt = undefined;
+  user.verificationOtpPurpose = undefined;
+  await user.save();
+
+  return res.json({ message: 'Password reset successful. Please login.' });
+}
+
+module.exports = {
+  forgotPassword,
+  login,
+  register,
+  resendOtp,
+  resetPassword,
+  verifyOtp
+};

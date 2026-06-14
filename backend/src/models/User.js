@@ -20,7 +20,11 @@ const userSchema = new mongoose.Schema(
     isVerified: { type: Boolean, default: false },
     verificationOtpHash: String,
     verificationOtpExpiresAt: Date,
-    verificationOtpLastSentAt: Date
+    verificationOtpLastSentAt: Date,
+    verificationOtpPurpose: {
+      type: String,
+      enum: ['verification', 'password-reset']
+    }
   },
   { timestamps: true }
 );
