@@ -1,0 +1,12 @@
+.git
+.azure
+.env
+**/node_modules
+**/dist
+evidence
+screenshots
+docs
+backend/storage/uploads/*
+backend/storage/badges/*
+!backend/storage/uploads/.gitkeep
+!backend/storage/badges/.gitkeep
