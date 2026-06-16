@@ -1,4 +1,5 @@
 # Visitor Pass Management System
+video link- https://drive.google.com/file/d/1GmIX_POBY6MaHu_jU0clThfB6cwkC21Z/view?usp=drive_link
 
 A MERN stack college project for managing digital visitor entry, appointments,
 QR passes, PDF badges, and check-in/check-out records.
