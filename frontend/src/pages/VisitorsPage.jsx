@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import DataTable from '../components/common/DataTable';
-import api from '../services/api';
+import api, { getServerAssetUrl } from '../services/api';
 import { getStoredUser } from '../utils/authStorage';
 
 const emptyVisitor = {
@@ -12,7 +12,8 @@ const emptyVisitor = {
   purpose: ''
 };
 
-const visitorColumns = ['name', 'email', 'phone', 'company', 'purpose'];
+const visitorFormFields = ['name', 'email', 'phone', 'company', 'purpose'];
+const visitorColumns = ['photo', 'name', 'email', 'phone', 'company', 'purpose'];
 
 function VisitorsPage() {
   const user = getStoredUser();
@@ -22,8 +23,12 @@ function VisitorsPage() {
   const [message, setMessage] = useState('');
 
   async function loadVisitors() {
-    const { data } = await api.get('/visitors');
-    setVisitors(data);
+    try {
+      const { data } = await api.get('/visitors');
+      setVisitors(data);
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to load visitors');
+    }
   }
 
   useEffect(() => {
@@ -74,7 +79,7 @@ function VisitorsPage() {
       <h2>Visitors</h2>
       {message && <p>{message}</p>}
       <form className="card form" onSubmit={addVisitor}>
-        {visitorColumns.map((field) => (
+        {visitorFormFields.map((field) => (
           <input
             key={field}
             type={field === 'email' ? 'email' : 'text'}
@@ -94,11 +99,27 @@ function VisitorsPage() {
             onChange={(event) => setPhoto(event.target.files[0])}
           />
         </label>
+        {photo && <small className="muted">Selected: {photo.name}</small>}
         <button type="submit">Add Visitor</button>
       </form>
       <DataTable
         data={visitors}
         columns={visitorColumns}
+        renderCell={(visitor, column) => {
+          if (column !== 'photo') {
+            return visitor[column] || '-';
+          }
+
+          return visitor.photo ? (
+            <img
+              className="visitor-photo-thumb"
+              src={getServerAssetUrl(visitor.photo)}
+              alt={`${visitor.name || 'Visitor'} uploaded`}
+            />
+          ) : (
+            '-'
+          );
+        }}
         renderActions={
           ['admin', 'security'].includes(user?.role)
             ? (visitor) => (

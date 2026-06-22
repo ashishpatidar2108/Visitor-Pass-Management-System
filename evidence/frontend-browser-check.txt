@@ -1,0 +1,36 @@
+Captured: 2026-06-18
+Local frontend URL: http://127.0.0.1:5173
+Local backend URL: http://127.0.0.1:5000
+
+Browser checks performed:
+
+- Login page loaded
+- Admin login reached /dashboard
+- Organization badge visible for multi-organization context
+- Visitors page rendered with one real image upload field and no stray photo text field
+- Appointments page rendered
+- Passes page rendered
+- Scan page rendered with QR scanner mount and gate/location input
+- Reports page rendered
+- Staff page rendered
+- Database page rendered
+- OTP verification page rendered
+- Register page rendered
+- Forgot password page rendered
+- Visitor portal rendered after visitor login
+- Browser console errors captured: none
+
+Screenshots refreshed in screenshots/:
+- 01-login-page.png
+- 02-dashboard-page.png
+- 03-visitors-page.png
+- 04-appointments-page.png
+- 05-pass-issue-page.png
+- 06-qr-verification-page.png
+- 07-mongodb-collections.png
+- 08-otp-verification.png
+- 09-reports-page.png
+- 10-staff-page.png
+- 11-register-page.png
+- 12-forgot-password-page.png
+- 13-visitor-portal-page.png

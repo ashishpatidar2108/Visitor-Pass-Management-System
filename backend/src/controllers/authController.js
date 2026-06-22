@@ -3,106 +3,126 @@ const jwt = require('jsonwebtoken');
 
 const User = require('../models/User');
 const { sendEmail, sendSms } = require('../services/notificationService');
-const {
-  generateOtp,
-  getOtpExpiry,
+const { generateOtp, getOtpExpiry,
   hashOtp,
   isOtpExpired,
   OTP_EXPIRY_MINUTES
 } = require('../utils/otp');
+
 const { normalizeOrganization } = require('../utils/organization');
 
 const OTP_RESEND_SECONDS = Number(process.env.OTP_RESEND_SECONDS) || 60;
 
-function isDemoMode() {
-  return process.env.OTP_DEMO_MODE === 'true';
+function cleanEmail(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase();
 }
 
-function canResendOtp(user) {
-  if (!user.verificationOtpLastSentAt) {
-    return true;
-  }
-
-  const elapsed = Date.now() - user.verificationOtpLastSentAt.getTime();
-  return elapsed >= OTP_RESEND_SECONDS * 1000;
-}
-
-async function deliverOtp(user, otp, purpose) {
-  const isPasswordReset = purpose === 'password-reset';
-  const subject = isPasswordReset
-    ? 'Visitor Pass Password Reset OTP'
-    : 'Visitor Pass Verification OTP';
-  const message = `Your Visitor Pass ${
-    isPasswordReset ? 'password reset' : 'verification'
-  } OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
-  const emailSent = await sendEmail(
-    user.email,
-    subject,
-    message
-  );
-
-  if (emailSent) {
-    return true;
-  }
-
-  return sendSms(user.phone, message);
-}
-
-async function issueOtp(user, purpose = 'verification') {
-  const otp = generateOtp();
-  user.verificationOtpHash = hashOtp(otp);
-  user.verificationOtpExpiresAt = getOtpExpiry();
-  user.verificationOtpLastSentAt = new Date();
-  user.verificationOtpPurpose = purpose;
-  await user.save();
-
-  if (isDemoMode()) {
-    return { sent: false, demoOtp: otp };
-  }
-
-  return { sent: await deliverOtp(user, otp, purpose) };
-}
-
-function createSession(user) {
+function makeLoginResponse(user) {
   const organization = normalizeOrganization(user.organization);
-  const sessionUser = {
+  const tokenUser = {
     id: user._id,
     name: user.name,
     email: user.email,
     role: user.role,
     organization
   };
-  const token = jwt.sign(sessionUser, process.env.JWT_SECRET, {
-    expiresIn: '7d'
-  });
 
-  return { token, user: sessionUser };
+  return {
+    token: jwt.sign(tokenUser, process.env.JWT_SECRET, { expiresIn: '7d' }),
+    user: tokenUser
+  };
+}
+
+function secondsLeftBeforeOtpResend(user) {
+  if (!user.verificationOtpLastSentAt) {
+    return 0;
+  }
+
+  const sentAt = user.verificationOtpLastSentAt.getTime();
+  const passedSeconds = Math.floor((Date.now() - sentAt) / 1000);
+  return Math.max(OTP_RESEND_SECONDS - passedSeconds, 0);
+}
+
+function removeOtpFromUser(user) {
+  user.verificationOtpHash = undefined;
+  user.verificationOtpExpiresAt = undefined;
+  user.verificationOtpLastSentAt = undefined;
+  user.verificationOtpPurpose = undefined;
+}
+
+async function saveAndSendOtp(user, purpose) {
+  const otp = generateOtp();
+  const isReset = purpose === 'password-reset';
+  const text = `Your Visitor Pass ${
+    isReset ? 'password reset' : 'verification'
+  } OTP is ${otp}. It expires in ${OTP_EXPIRY_MINUTES} minutes.`;
+
+  user.verificationOtpHash = hashOtp(otp);
+  user.verificationOtpExpiresAt = getOtpExpiry();
+  user.verificationOtpLastSentAt = new Date();
+  user.verificationOtpPurpose = purpose;
+  await user.save();
+
+  if (process.env.OTP_DEMO_MODE === 'true') {
+    return { sent: true, demoOtp: otp };
+  }
+
+  const emailSent = await sendEmail(
+    user.email,
+    isReset
+      ? 'Visitor Pass Password Reset OTP'
+      : 'Visitor Pass Verification OTP',
+    text
+  );
+  const smsSent = emailSent ? false : await sendSms(user.phone, text);
+
+  return { sent: emailSent || smsSent };
+}
+
+function otpMatches(user, enteredOtp, purpose) {
+  if (!enteredOtp || !user.verificationOtpHash) {
+    return false;
+  }
+
+  if (user.verificationOtpPurpose !== purpose) {
+    return false;
+  }
+
+  return hashOtp(enteredOtp) === user.verificationOtpHash;
 }
 
 async function register(req, res) {
-  const { name, email, password, phone, organization } = req.body;
-  const normalizedEmail = String(email || '')
-    .trim()
-    .toLowerCase();
-  const existingUser = await User.findOne({ email: normalizedEmail });
+  const name = String(req.body.name || '').trim();
+  const email = cleanEmail(req.body.email);
+  const password = String(req.body.password || '');
+  const phone = String(req.body.phone || '').trim();
+  const organization = normalizeOrganization(req.body.organization);
 
+  if (!name || !email || password.length < 6) {
+    return res.status(400).json({
+      message: 'Name, valid email, and 6 character password are required'
+    });
+  }
+
+  const existingUser = await User.findOne({ email });
   if (existingUser) {
     return res.status(400).json({ message: 'Email already exists' });
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
   const user = await User.create({
     name,
-    email: normalizedEmail,
-    password: passwordHash,
+    email,
+    password: await bcrypt.hash(password, 10),
     role: 'visitor',
     phone,
-    organization: normalizeOrganization(organization),
+    organization,
     isVerified: false
   });
-  const delivery = await issueOtp(user);
+  const otpResult = await saveAndSendOtp(user, 'verification');
 
-  if (!delivery.sent && !delivery.demoOtp) {
+  if (!otpResult.sent) {
     return res.status(503).json({
       message: 'OTP delivery is not configured. Contact the administrator.',
       email: user.email,
@@ -111,50 +131,49 @@ async function register(req, res) {
   }
 
   return res.status(201).json({
-    message: delivery.demoOtp
+    message: otpResult.demoOtp
       ? 'OTP generated for local demo verification'
       : 'OTP sent to your registered email or phone',
     email: user.email,
     verificationRequired: true,
-    demoOtp: delivery.demoOtp
+    demoOtp: otpResult.demoOtp
   });
 }
 
 async function login(req, res) {
-  const { email, password } = req.body;
-  const normalizedEmail = String(email || '')
-    .trim()
-    .toLowerCase();
-  const user = await User.findOne({ email: normalizedEmail });
-  const passwordMatches =
-    user && (await bcrypt.compare(password, user.password));
+  const email = cleanEmail(req.body.email);
+  const password = String(req.body.password || '');
+  const user = await User.findOne({ email });
 
-  if (!passwordMatches) {
+  if (!user) {
+    return res.status(401).json({ message: 'Invalid credentials' });
+  }
+
+  const passwordOk = await bcrypt.compare(password, user.password);
+  if (!passwordOk) {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
   if (user.isVerified === false) {
-    const delivery = await issueOtp(user);
+    const otpResult = await saveAndSendOtp(user, 'verification');
 
     return res.status(403).json({
-      message: delivery.demoOtp
+      message: otpResult.demoOtp
         ? 'A new demo OTP was generated. Verify your account to continue.'
-        : delivery.sent
+        : otpResult.sent
           ? 'A new OTP was sent. Verify your account to continue.'
           : 'OTP delivery is not configured. Contact the administrator.',
       email: user.email,
       verificationRequired: true,
-      demoOtp: delivery.demoOtp
+      demoOtp: otpResult.demoOtp
     });
   }
 
-  return res.json(createSession(user));
+  return res.json(makeLoginResponse(user));
 }
 
 async function verifyOtp(req, res) {
-  const email = String(req.body.email || '')
-    .trim()
-    .toLowerCase();
+  const email = cleanEmail(req.body.email);
   const otp = String(req.body.otp || '').trim();
   const user = await User.findOne({ email });
 
@@ -170,28 +189,19 @@ async function verifyOtp(req, res) {
     return res.status(400).json({ message: 'OTP expired. Request a new OTP.' });
   }
 
-  if (
-    user.verificationOtpPurpose !== 'verification' ||
-    !user.verificationOtpHash ||
-    hashOtp(otp) !== user.verificationOtpHash
-  ) {
+  if (!otpMatches(user, otp, 'verification')) {
     return res.status(400).json({ message: 'Invalid OTP' });
   }
 
   user.isVerified = true;
-  user.verificationOtpHash = undefined;
-  user.verificationOtpExpiresAt = undefined;
-  user.verificationOtpLastSentAt = undefined;
-  user.verificationOtpPurpose = undefined;
+  removeOtpFromUser(user);
   await user.save();
 
   return res.json({ message: 'Account verified. You can now login.' });
 }
 
 async function resendOtp(req, res) {
-  const email = String(req.body.email || '')
-    .trim()
-    .toLowerCase();
+  const email = cleanEmail(req.body.email);
   const user = await User.findOne({ email });
 
   if (!user) {
@@ -202,63 +212,59 @@ async function resendOtp(req, res) {
     return res.status(400).json({ message: 'Account is already verified' });
   }
 
-  if (!canResendOtp(user)) {
+  const waitSeconds = secondsLeftBeforeOtpResend(user);
+  if (waitSeconds > 0) {
     return res.status(429).json({
-      message: `Please wait ${OTP_RESEND_SECONDS} seconds before resending`
+      message: `Please wait ${waitSeconds} seconds before resending`
     });
   }
 
-  const delivery = await issueOtp(user);
-
-  if (!delivery.sent && !delivery.demoOtp) {
+  const otpResult = await saveAndSendOtp(user, 'verification');
+  if (!otpResult.sent) {
     return res.status(503).json({
       message: 'OTP delivery is not configured. Contact the administrator.'
     });
   }
 
   return res.json({
-    message: delivery.demoOtp ? 'New demo OTP generated' : 'New OTP sent',
-    demoOtp: delivery.demoOtp
+    message: otpResult.demoOtp ? 'New demo OTP generated' : 'New OTP sent',
+    demoOtp: otpResult.demoOtp
   });
 }
 
 async function forgotPassword(req, res) {
-  const email = String(req.body.email || '')
-    .trim()
-    .toLowerCase();
+  const email = cleanEmail(req.body.email);
   const user = await User.findOne({ email });
 
   if (!user) {
     return res.status(404).json({ message: 'No account found with this email' });
   }
 
-  if (!canResendOtp(user)) {
+  const waitSeconds = secondsLeftBeforeOtpResend(user);
+  if (waitSeconds > 0) {
     return res.status(429).json({
-      message: `Please wait ${OTP_RESEND_SECONDS} seconds before requesting another OTP`
+      message: `Please wait ${waitSeconds} seconds before requesting another OTP`
     });
   }
 
-  const delivery = await issueOtp(user, 'password-reset');
-
-  if (!delivery.sent && !delivery.demoOtp) {
+  const otpResult = await saveAndSendOtp(user, 'password-reset');
+  if (!otpResult.sent) {
     return res.status(503).json({
       message: 'OTP delivery is not configured. Contact the administrator.'
     });
   }
 
   return res.json({
-    message: delivery.demoOtp
+    message: otpResult.demoOtp
       ? 'Password reset demo OTP generated'
       : 'Password reset OTP sent',
     email: user.email,
-    demoOtp: delivery.demoOtp
+    demoOtp: otpResult.demoOtp
   });
 }
 
 async function resetPassword(req, res) {
-  const email = String(req.body.email || '')
-    .trim()
-    .toLowerCase();
+  const email = cleanEmail(req.body.email);
   const otp = String(req.body.otp || '').trim();
   const password = String(req.body.password || '');
   const user = await User.findOne({ email });
@@ -277,19 +283,12 @@ async function resetPassword(req, res) {
     return res.status(400).json({ message: 'OTP expired. Request a new OTP.' });
   }
 
-  if (
-    user.verificationOtpPurpose !== 'password-reset' ||
-    !user.verificationOtpHash ||
-    hashOtp(otp) !== user.verificationOtpHash
-  ) {
+  if (!otpMatches(user, otp, 'password-reset')) {
     return res.status(400).json({ message: 'Invalid OTP' });
   }
 
   user.password = await bcrypt.hash(password, 10);
-  user.verificationOtpHash = undefined;
-  user.verificationOtpExpiresAt = undefined;
-  user.verificationOtpLastSentAt = undefined;
-  user.verificationOtpPurpose = undefined;
+  removeOtpFromUser(user);
   await user.save();
 
   return res.json({ message: 'Password reset successful. Please login.' });

@@ -1,5 +1,11 @@
-Verified: 2026-06-13
+Captured: 2026-06-18T08:14:48.8772223+05:30
+Working directory: F:\web dovelpment\9.assignment\visitor-pass-management
 Node: v24.14.1
 npm: 11.11.0
-Docker: not installed on this verification machine
-Browser: login and reports page loaded successfully at http://127.0.0.1:5173
+OS: Microsoft Windows NT 10.0.19045.0
+Docker: Docker CLI not installed on this machine
+Backend tests: npm test
+Backend smoke test: npm run test:smoke
+Frontend tests: npm test
+Frontend production build: npm run build
+Browser check: in-app browser against local backend/frontend

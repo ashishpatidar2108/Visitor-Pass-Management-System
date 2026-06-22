@@ -120,7 +120,7 @@ function LoginPage() {
             aria-live="polite"
           >
             <span className="login-alert-icon" aria-hidden="true">
-              ✓
+              OK
             </span>
             <p>{location.state.message}</p>
           </div>

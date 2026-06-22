@@ -423,7 +423,10 @@ a {
 }
 
 .login-alert-success .login-alert-icon {
+  flex-basis: 28px;
+  width: 28px;
   background: #16a34a;
+  font-size: 10px;
 }
 
 .login-links {
@@ -756,6 +759,15 @@ tbody tr:hover {
   width: 120px;
   height: auto;
   margin: 10px 0;
+}
+
+.visitor-photo-thumb {
+  display: block;
+  width: 52px;
+  height: 52px;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  object-fit: cover;
 }
 
 .pass-actions {

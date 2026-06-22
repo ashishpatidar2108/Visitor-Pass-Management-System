@@ -37,14 +37,30 @@ function AppointmentsPage() {
   const [message, setMessage] = useState('');
 
   async function loadAppointments() {
-    const { data } = await api.get('/appointments');
-    setAppointments(data);
+    try {
+      const { data } = await api.get('/appointments');
+      setAppointments(data);
+    } catch (error) {
+      setMessage(
+        error.response?.data?.message || 'Unable to load appointments'
+      );
+    }
   }
 
   useEffect(() => {
     loadAppointments();
-    api.get('/visitors').then((response) => setVisitors(response.data));
-    api.get('/users/hosts').then((response) => setUsers(response.data));
+    api
+      .get('/visitors')
+      .then((response) => setVisitors(response.data))
+      .catch((error) =>
+        setMessage(error.response?.data?.message || 'Unable to load visitors')
+      );
+    api
+      .get('/users/hosts')
+      .then((response) => setUsers(response.data))
+      .catch((error) =>
+        setMessage(error.response?.data?.message || 'Unable to load hosts')
+      );
   }, []);
 
   async function addAppointment(event) {

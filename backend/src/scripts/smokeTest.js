@@ -1,16 +1,26 @@
 require('../config/env');
 
+const bcrypt = require('bcryptjs');
+const fs = require('fs/promises');
 const mongoose = require('mongoose');
+const path = require('path');
 
 const app = require('../app');
+const { uploadsDir } = require('../config/paths');
 const connectDB = require('../config/db');
 const CheckLog = require('../models/CheckLog');
 const User = require('../models/User');
+const Visitor = require('../models/Visitor');
 
 const smokeEmail = `smoke-${Date.now()}@example.com`;
+const uploadEmail = `upload-${Date.now()}@example.com`;
+const otherOrgEmail = `other-org-${Date.now()}@example.com`;
 const smokePassword = 'SmokeTest123!';
 const resetPassword = 'ResetTest456!';
 let createdLogId;
+let uploadedVisitorId;
+let uploadedPhoto;
+let otherOrgUserId;
 
 async function request(baseUrl, path, options = {}) {
   const response = await fetch(`${baseUrl}${path}`, options);
@@ -36,7 +46,7 @@ async function run() {
   const baseUrl = `http://127.0.0.1:${address.port}`;
 
   try {
-    const root = await request(baseUrl, '/');
+    const root = await request(baseUrl, '/api/health');
     console.log(`PASS API health (${root.status})`);
 
     const invalidTokenResponse = await fetch(`${baseUrl}/api/dashboard`, {
@@ -60,6 +70,59 @@ async function run() {
 
     await request(baseUrl, '/api/dashboard', { headers: authHeaders });
     console.log('PASS protected dashboard request');
+
+    const photoForm = new FormData();
+    photoForm.append('name', 'Smoke Uploaded Visitor');
+    photoForm.append('email', uploadEmail);
+    photoForm.append('phone', '9999999999');
+    photoForm.append('company', 'Smoke Test Company');
+    photoForm.append('purpose', 'Photo upload verification');
+    photoForm.append(
+      'photo',
+      new Blob([Buffer.from('smoke-test-photo')], { type: 'image/png' }),
+      'smoke-photo.png'
+    );
+
+    const uploadedVisitor = await request(baseUrl, '/api/visitors', {
+      method: 'POST',
+      headers: authHeaders,
+      body: photoForm
+    });
+    uploadedVisitorId = uploadedVisitor.body._id;
+    uploadedPhoto = uploadedVisitor.body.photo;
+    if (!uploadedPhoto) {
+      throw new Error('Visitor photo path was not saved');
+    }
+    await fs.access(path.join(uploadsDir, path.basename(uploadedPhoto)));
+    console.log('PASS visitor photo upload stored');
+
+    const otherOrgUser = await User.create({
+      name: 'Other Org Admin',
+      email: otherOrgEmail,
+      password: await bcrypt.hash('123456', 10),
+      role: 'admin',
+      organization: 'Branch Office',
+      isVerified: true
+    });
+    otherOrgUserId = otherOrgUser._id;
+
+    const otherOrgLogin = await request(baseUrl, '/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: otherOrgEmail,
+        password: '123456'
+      })
+    });
+    const otherOrgVisitors = await request(baseUrl, '/api/visitors', {
+      headers: { Authorization: `Bearer ${otherOrgLogin.body.token}` }
+    });
+    if (
+      otherOrgVisitors.body.some((visitor) => visitor._id === uploadedVisitorId)
+    ) {
+      throw new Error('Visitor from Main Office was visible in Branch Office');
+    }
+    console.log('PASS multi-organization visitor isolation');
 
     const passes = await request(baseUrl, '/api/passes', {
       headers: authHeaders
@@ -207,6 +270,17 @@ async function run() {
   } finally {
     if (createdLogId) {
       await CheckLog.deleteOne({ _id: createdLogId });
+    }
+    if (uploadedVisitorId) {
+      await Visitor.deleteOne({ _id: uploadedVisitorId });
+    }
+    if (uploadedPhoto) {
+      await fs.unlink(path.join(uploadsDir, path.basename(uploadedPhoto))).catch(
+        () => {}
+      );
+    }
+    if (otherOrgUserId) {
+      await User.deleteOne({ _id: otherOrgUserId });
     }
     await User.deleteOne({ email: smokeEmail });
     await new Promise((resolve) => server.close(resolve));

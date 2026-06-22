@@ -1,0 +1,6 @@
+﻿Production serving check for Render-style Docker output
+
+PASS production /api/health
+PASS production SPA route /login
+
+This check set NODE_ENV=production, used the built frontend dist folder, started the Express app on a random local port, verified /api/health, and verified a React route serves index.html.

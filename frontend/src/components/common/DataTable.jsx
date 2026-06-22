@@ -1,4 +1,4 @@
-function DataTable({ columns, data, renderActions }) {
+function DataTable({ columns, data, renderActions, renderCell }) {
   return (
     <div className="table-container">
       <table>
@@ -14,7 +14,9 @@ function DataTable({ columns, data, renderActions }) {
           {data.map((row) => (
             <tr key={row._id}>
               {columns.map((column) => (
-                <td key={column}>{row[column] || '-'}</td>
+                <td key={column}>
+                  {renderCell ? renderCell(row, column) : row[column] || '-'}
+                </td>
               ))}
               {renderActions && <td>{renderActions(row)}</td>}
             </tr>

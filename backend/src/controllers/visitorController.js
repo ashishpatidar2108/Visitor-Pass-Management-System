@@ -8,13 +8,13 @@ const Pass = require('../models/Pass');
 const Visitor = require('../models/Visitor');
 const { getRequestOrganization } = require('../utils/organization');
 
-async function deleteStoredFile(rootDir, assetPath) {
-  if (!assetPath) {
+async function deleteStoredFile(folder, filePath) {
+  if (!filePath) {
     return;
   }
 
   try {
-    await fs.unlink(path.join(rootDir, path.basename(assetPath)));
+    await fs.unlink(path.join(folder, path.basename(filePath)));
   } catch (error) {
     if (error.code !== 'ENOENT') {
       throw error;
@@ -24,40 +24,66 @@ async function deleteStoredFile(rootDir, assetPath) {
 
 async function createVisitor(req, res) {
   const organization = getRequestOrganization(req);
-  const email = req.user.role === 'visitor' ? req.user.email : req.body.email;
-  const existingVisitor =
-    req.user.role === 'visitor'
-      ? await Visitor.findOne({ email: req.user.email, organization })
-      : null;
+  const name = String(req.body.name || '').trim();
+  const phone = String(req.body.phone || '').trim();
+  const company = String(req.body.company || '').trim();
+  const purpose = String(req.body.purpose || '').trim();
+  const idProof = String(req.body.idProof || '').trim();
+  let email = String(req.body.email || '').trim().toLowerCase();
 
-  if (existingVisitor) {
-    return res.status(400).json({ message: 'Visitor profile already exists' });
+  if (req.user.role === 'visitor') {
+    email = req.user.email;
+  }
+
+  if (!name) {
+    await deleteStoredFile(uploadsDir, req.file?.filename);
+    return res.status(400).json({ message: 'Visitor name is required' });
+  }
+
+  if (req.user.role === 'visitor') {
+    const existingProfile = await Visitor.findOne({
+      email: req.user.email,
+      organization
+    });
+
+    if (existingProfile) {
+      await deleteStoredFile(uploadsDir, req.file?.filename);
+      return res
+        .status(400)
+        .json({ message: 'Visitor profile already exists' });
+    }
   }
 
   const visitor = await Visitor.create({
-    ...req.body,
+    name,
     email,
+    phone,
+    company,
+    purpose,
+    idProof,
     photo: req.file ? `/uploads/${req.file.filename}` : undefined,
     organization,
     createdBy: req.user.id
   });
 
-  res.status(201).json(visitor);
+  return res.status(201).json(visitor);
 }
 
 async function getVisitors(req, res) {
-  const visitors = await Visitor.find({
-    organization: getRequestOrganization(req)
-  }).sort('-createdAt');
-  res.json(visitors);
+  const organization = getRequestOrganization(req);
+  const visitors = await Visitor.find({ organization }).sort('-createdAt');
+
+  return res.json(visitors);
 }
 
 async function getMyVisitorProfile(req, res) {
+  const organization = getRequestOrganization(req);
   const visitor = await Visitor.findOne({
     email: req.user.email,
-    organization: getRequestOrganization(req)
+    organization
   });
-  res.json(visitor);
+
+  return res.json(visitor);
 }
 
 async function deleteVisitor(req, res) {
@@ -74,23 +100,20 @@ async function deleteVisitor(req, res) {
   const passes = await Pass.find({ visitor: visitor._id, organization });
   const passIds = passes.map((pass) => pass._id);
 
-  await Promise.all([
-    Appointment.deleteMany({ visitor: visitor._id, organization }),
-    CheckLog.deleteMany({
-      organization,
-      $or: [{ visitor: visitor._id }, { pass: { $in: passIds } }]
-    }),
-    Pass.deleteMany({ visitor: visitor._id, organization }),
-    Visitor.deleteOne({ _id: visitor._id, organization })
-  ]);
+  await Appointment.deleteMany({ visitor: visitor._id, organization });
+  await CheckLog.deleteMany({
+    organization,
+    $or: [{ visitor: visitor._id }, { pass: { $in: passIds } }]
+  });
+  await Pass.deleteMany({ visitor: visitor._id, organization });
+  await Visitor.deleteOne({ _id: visitor._id, organization });
 
-  await Promise.allSettled([
-    deleteStoredFile(uploadsDir, visitor.photo),
-    ...passes.flatMap((pass) => [
-      deleteStoredFile(badgesDir, pass.qrImage),
-      deleteStoredFile(badgesDir, pass.pdfPath)
-    ])
-  ]);
+  await deleteStoredFile(uploadsDir, visitor.photo);
+
+  for (const pass of passes) {
+    await deleteStoredFile(badgesDir, pass.qrImage);
+    await deleteStoredFile(badgesDir, pass.pdfPath);
+  }
 
   return res.json({ message: 'Visitor removed' });
 }

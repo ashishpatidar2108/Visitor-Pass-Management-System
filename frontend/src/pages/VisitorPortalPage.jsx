@@ -26,16 +26,22 @@ function VisitorPortalPage() {
     purpose: ''
   });
   const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
 
   async function loadPortal() {
-    const [profileResponse, hostResponse, passResponse] = await Promise.all([
-      api.get('/visitors/me'),
-      api.get('/users/hosts'),
-      api.get('/passes/my')
-    ]);
-    setProfile(profileResponse.data);
-    setHosts(hostResponse.data);
-    setPasses(passResponse.data);
+    try {
+      const [profileResponse, hostResponse, passResponse] = await Promise.all([
+        api.get('/visitors/me'),
+        api.get('/users/hosts'),
+        api.get('/passes/my')
+      ]);
+      setProfile(profileResponse.data);
+      setHosts(hostResponse.data);
+      setPasses(passResponse.data);
+    } catch (error) {
+      setIsError(true);
+      setMessage(error.response?.data?.message || 'Unable to load portal');
+    }
   }
 
   useEffect(() => {
@@ -44,28 +50,46 @@ function VisitorPortalPage() {
 
   async function createProfile(event) {
     event.preventDefault();
+    setIsError(false);
+    setMessage('');
     const payload = new FormData();
     Object.entries(form).forEach(([key, value]) => payload.append(key, value));
     if (photo) payload.append('photo', photo);
-    await api.post('/visitors', payload);
-    setMessage('Visitor profile created');
-    await loadPortal();
+
+    try {
+      await api.post('/visitors', payload);
+      setMessage('Visitor profile created');
+      await loadPortal();
+    } catch (error) {
+      setIsError(true);
+      setMessage(error.response?.data?.message || 'Unable to save profile');
+    }
   }
 
   async function requestAppointment(event) {
     event.preventDefault();
-    await api.post('/appointments', {
-      ...appointment,
-      visitor: profile._id
-    });
-    setAppointment({ host: '', date: '', purpose: '' });
-    setMessage('Appointment request submitted');
+    setIsError(false);
+    setMessage('');
+
+    try {
+      await api.post('/appointments', {
+        ...appointment,
+        visitor: profile._id
+      });
+      setAppointment({ host: '', date: '', purpose: '' });
+      setMessage('Appointment request submitted');
+    } catch (error) {
+      setIsError(true);
+      setMessage(
+        error.response?.data?.message || 'Unable to request appointment'
+      );
+    }
   }
 
   return (
     <>
       <h2>Visitor Portal</h2>
-      {message && <p className="success">{message}</p>}
+      {message && <p className={isError ? 'error' : 'success'}>{message}</p>}
 
       {!profile ? (
         <form className="card form" onSubmit={createProfile}>
@@ -81,11 +105,14 @@ function VisitorPortalPage() {
               required={field === 'name'}
             />
           ))}
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(event) => setPhoto(event.target.files[0])}
-          />
+          <label className="file-field">
+            Visitor photo
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(event) => setPhoto(event.target.files[0])}
+            />
+          </label>
           <button type="submit">Save Profile</button>
         </form>
       ) : (

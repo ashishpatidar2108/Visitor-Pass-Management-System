@@ -140,9 +140,12 @@ The smoke test uses the configured MongoDB database and demo login. It verifies:
 - Invalid JWT rejection
 - Login and JWT creation
 - Protected dashboard access
+- Visitor photo upload with Multer
+- Multi-organization visitor isolation
 - QR pass verification and check-in log creation
 - Report filtering
 - Visitor registration, demo OTP verification, and visitor login
+- Password reset OTP and login with the new password
 
 Temporary smoke-test users and logs are deleted when the test finishes.
 Captured command output is stored in the `evidence` folder.
@@ -180,7 +183,8 @@ restricted to that organization.
 
 ## Docker + Nginx
 
-For local Docker deployment:
+The Dockerfile, Nginx config, and compose file are included for local Docker
+deployment:
 
 ```bash
 docker compose up --build
@@ -189,9 +193,27 @@ docker compose up --build
 Open `http://localhost:8080`.
 
 The Nginx frontend proxies `/api`, `/uploads`, and `/badges` to the backend.
-Run this command on a machine with Docker installed and include its terminal
-output in the demo video. Docker was not available on the machine used to
-create the included execution evidence.
+Docker CLI is not installed on the current Windows machine, so Docker runtime
+verification is recorded as unavailable in `evidence/environment.txt`. The live
+Render deployment should be used as the hosted execution proof for submission.
+
+## Render Deployment
+
+Render deployment files are now included in this same project root. There is no
+separate deployment copy of the project.
+
+- `render.yaml` tells Render to use Docker.
+- `Dockerfile.render` builds the React frontend and Node backend together.
+- The backend serves the built React app in production and exposes
+  `/api/health` for Render health checks.
+
+On Render, connect this GitHub repository and deploy from the root folder:
+
+```text
+visitor-pass-management/
+```
+
+Do not deploy from a separate `visitor-pass-management-render-deploy` folder.
 
 ## Project Flow
 
@@ -214,6 +236,17 @@ The `screenshots` folder contains:
 6. QR verification page
 7. MongoDB collections
 8. OTP verification page
+9. Reports page
+10. Staff management page
+11. Visitor registration page
+12. Forgot password page
+13. Visitor portal page
 
-The `evidence` folder contains unit-test, build, environment, and API smoke-test
-output captured on June 13, 2026
+The `evidence` folder contains unit-test, build, environment, API smoke-test,
+Render production-serving, and browser sanity-check output captured on
+June 18, 2026.
+
+Before resubmitting, record a narrated demo video using the checklist in
+`docs/RESUBMISSION.md`. Submit both the live application URL and the source code
+repository/files so the mentor can inspect the implemented React pages and test
+files.

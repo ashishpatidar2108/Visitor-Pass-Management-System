@@ -21,10 +21,16 @@ function StaffPage() {
   const [users, setUsers] = useState([]);
   const [form, setForm] = useState(initialForm);
   const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
 
   async function loadUsers() {
-    const { data } = await api.get('/users');
-    setUsers(data);
+    try {
+      const { data } = await api.get('/users');
+      setUsers(data);
+    } catch (error) {
+      setIsError(true);
+      setMessage(error.response?.data?.message || 'Unable to load staff');
+    }
   }
 
   useEffect(() => {
@@ -33,21 +39,41 @@ function StaffPage() {
 
   async function createStaff(event) {
     event.preventDefault();
-    await api.post('/users', form);
-    setForm(initialForm);
-    setMessage('Staff account created');
-    await loadUsers();
+    setIsError(false);
+    setMessage('');
+
+    try {
+      await api.post('/users', form);
+      setForm(initialForm);
+      setMessage('Staff account created');
+      await loadUsers();
+    } catch (error) {
+      setIsError(true);
+      setMessage(error.response?.data?.message || 'Unable to create staff');
+    }
   }
 
   async function changeRole(id, role) {
-    await api.patch(`/users/${id}`, { role });
-    await loadUsers();
+    try {
+      await api.patch(`/users/${id}`, { role });
+      await loadUsers();
+    } catch (error) {
+      setIsError(true);
+      setMessage(error.response?.data?.message || 'Unable to update staff');
+    }
   }
 
   async function deleteUser(id) {
     if (!window.confirm('Delete this user account?')) return;
-    await api.delete(`/users/${id}`);
-    await loadUsers();
+
+    try {
+      await api.delete(`/users/${id}`);
+      setMessage('Staff account deleted');
+      await loadUsers();
+    } catch (error) {
+      setIsError(true);
+      setMessage(error.response?.data?.message || 'Unable to delete staff');
+    }
   }
 
   return (
@@ -92,7 +118,7 @@ function StaffPage() {
         <input placeholder="Organization" value={form.organization} readOnly />
         <button type="submit">Add Staff</button>
       </form>
-      {message && <p className="success">{message}</p>}
+      {message && <p className={isError ? 'error' : 'success'}>{message}</p>}
 
       <div className="table-container">
         <table>

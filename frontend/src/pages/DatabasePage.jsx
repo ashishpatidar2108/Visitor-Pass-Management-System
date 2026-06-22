@@ -4,11 +4,17 @@ import api from '../services/api';
 
 function DatabasePage() {
   const [collections, setCollections] = useState([]);
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
     api
       .get('/dashboard/collections')
-      .then((response) => setCollections(response.data));
+      .then((response) => setCollections(response.data))
+      .catch((error) =>
+        setMessage(
+          error.response?.data?.message || 'Unable to load database summary'
+        )
+      );
   }, []);
 
   return (
@@ -22,6 +28,7 @@ function DatabasePage() {
         </div>
         <span className="database-badge">MongoDB Connected</span>
       </div>
+      {message && <p className="error">{message}</p>}
       <div className="database-grid">
         {collections.map((collection) => (
           <article className="collection-card" key={collection.name}>

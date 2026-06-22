@@ -6,6 +6,7 @@ const QrScanner = lazy(() => import('../components/scanner/QrScanner'));
 
 function ScanPage() {
   const [token, setToken] = useState('');
+  const [location, setLocation] = useState('Main Gate');
   const [message, setMessage] = useState('');
 
   const handleScan = useCallback((decodedText) => {
@@ -19,8 +20,12 @@ function ScanPage() {
   }, []);
 
   async function verifyPass() {
+    const qrToken = token.trim();
+
     try {
-      const { data } = await api.get(`/passes/verify/${token}`);
+      const { data } = await api.get(
+        `/passes/verify/${encodeURIComponent(qrToken)}`
+      );
       setMessage(
         data.valid ? `Valid Pass: ${data.pass.visitor.name}` : 'Invalid/Expired'
       );
@@ -30,8 +35,14 @@ function ScanPage() {
   }
 
   async function saveLog(action) {
+    const qrToken = token.trim();
+
     try {
-      await api.post('/logs', { qrToken: token, action });
+      await api.post('/logs', {
+        qrToken,
+        action,
+        location: location.trim() || 'Main Gate'
+      });
       setMessage(`${action === 'checkin' ? 'Check in' : 'Check out'} saved`);
     } catch (error) {
       setMessage(error.response?.data?.message || 'Unable to save log');
@@ -57,20 +68,25 @@ function ScanPage() {
             value={token}
             onChange={(event) => setToken(event.target.value)}
           />
-          <button type="button" onClick={verifyPass} disabled={!token}>
+          <input
+            placeholder="Gate / desk location"
+            value={location}
+            onChange={(event) => setLocation(event.target.value)}
+          />
+          <button type="button" onClick={verifyPass} disabled={!token.trim()}>
             Verify
           </button>
           <button
             type="button"
             onClick={() => saveLog('checkin')}
-            disabled={!token}
+            disabled={!token.trim()}
           >
             Check In
           </button>
           <button
             type="button"
             onClick={() => saveLog('checkout')}
-            disabled={!token}
+            disabled={!token.trim()}
           >
             Check Out
           </button>

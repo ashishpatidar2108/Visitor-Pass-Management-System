@@ -9,14 +9,21 @@ function DashboardPage() {
     passStatus: {},
     recentLogs: []
   });
+  const [message, setMessage] = useState('');
 
   useEffect(() => {
-    api.get('/dashboard').then((response) => setDashboard(response.data));
+    api
+      .get('/dashboard')
+      .then((response) => setDashboard(response.data))
+      .catch((error) =>
+        setMessage(error.response?.data?.message || 'Unable to load dashboard')
+      );
   }, []);
 
   return (
     <>
       <h2>Dashboard</h2>
+      {message && <p className="error">{message}</p>}
       <div className="grid">
         {Object.entries(dashboard.summary).map(([label, value]) => (
           <div className="stat" key={label}>

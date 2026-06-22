@@ -6,3 +6,5 @@ backend/storage/badges/*
 !backend/storage/uploads/.gitkeep
 !backend/storage/badges/.gitkeep
 npm-debug.log*
+*-dev.log
+*-dev.err.log

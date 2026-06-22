@@ -20,12 +20,21 @@ function PassesPage() {
   const [message, setMessage] = useState('');
 
   async function loadPasses() {
-    const { data } = await api.get('/passes');
-    setPasses(data);
+    try {
+      const { data } = await api.get('/passes');
+      setPasses(data);
+    } catch (error) {
+      setMessage(error.response?.data?.message || 'Unable to load passes');
+    }
   }
 
   useEffect(() => {
-    api.get('/visitors').then((response) => setVisitors(response.data));
+    api
+      .get('/visitors')
+      .then((response) => setVisitors(response.data))
+      .catch((error) =>
+        setMessage(error.response?.data?.message || 'Unable to load visitors')
+      );
     loadPasses();
   }, []);
 
