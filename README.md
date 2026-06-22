@@ -31,6 +31,24 @@ QR passes, PDF badges, and check-in/check-out records.
 - MongoDB collection summary
 - Docker and Nginx deployment setup
 
+## Frontend Source Code
+
+The complete React frontend source code is included in this repository under
+`frontend/src`.
+
+For mentor evaluation, the key files are:
+
+- `frontend/src/App.jsx` for React routing and page registration
+- `frontend/src/pages` for dashboard, visitors, appointments, passes, scan,
+  reports, staff, database, login, register, OTP, and visitor portal screens
+- `frontend/src/components/scanner/QrScanner.jsx` for QR camera integration
+- `frontend/src/services/api.js` for frontend API calls
+- `frontend/src/styles/style.css` for the application UI
+
+A backup upload package is also included as `frontend-source-code.zip`, which
+contains the same `frontend/src` source files for submission portals that
+require a single file upload.
+
 ## Local Setup
 
 ### 1. Install dependencies
